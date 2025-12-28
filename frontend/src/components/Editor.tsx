@@ -21,6 +21,7 @@ interface Tab {
   name: string
   content: string
   isDirty: boolean
+  filePath?: string
 }
 
 interface MenuDropdownProps {
@@ -195,7 +196,15 @@ export function Editor() {
       
       await refreshFileList()
     } catch (error) {
-      alert(`Error creating ${creatingItem.type}: ${error}`)
+      console.error(`Error creating ${creatingItem.type}:`, error)
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      if (errorMsg.includes('permission') || errorMsg.includes('Permission')) {
+        alert(`Permission denied: Cannot create ${creatingItem.type} in this location. Please check file permissions.`)
+      } else if (errorMsg.includes('already exists')) {
+        alert(`${creatingItem.type} already exists with that name.`)
+      } else {
+        alert(`Error creating ${creatingItem.type}: ${errorMsg}`)
+      }
     } finally {
       setCreatingItem(null)
       setInputValue('')
@@ -258,18 +267,23 @@ export function Editor() {
     const currentTab = tabs.find(tab => tab.id === activeTab)
     if (currentTab) {
       try {
-        if (currentTab.name.startsWith('Untitled')) {
+        if (currentTab.name.startsWith('Untitled') || !currentTab.filePath) {
           await saveFileAs()
         } else {
-          const filePath = `${currentProject}/${currentTab.name}`
-          await WriteFile(filePath, currentTab.content)
+          await WriteFile(currentTab.filePath, currentTab.content)
           setTabs(tabs.map(tab => 
             tab.id === activeTab ? { ...tab, isDirty: false } : tab
           ))
           await refreshFileList()
         }
       } catch (error) {
-        alert(`Error saving file: ${error}`)
+        console.error('Error saving file:', error)
+        const errorMsg = error instanceof Error ? error.message : String(error)
+        if (errorMsg.includes('permission') || errorMsg.includes('Permission') || errorMsg.includes('read-only')) {
+          alert(`Permission denied: Cannot save file. Please check file permissions or try saving to a different location.`)
+        } else {
+          alert(`Error saving file: ${errorMsg}`)
+        }
       }
     }
   }
@@ -278,17 +292,23 @@ export function Editor() {
     const currentTab = tabs.find(tab => tab.id === activeTab)
     if (currentTab) {
       try {
-        const filePath = await SaveFileDialog('')
+        const filePath = await SaveFileDialog(currentTab.name.startsWith('Untitled') ? '' : currentTab.name)
         if (filePath) {
           await WriteFile(filePath, currentTab.content)
           const fileName = filePath.split('/').pop() || filePath
           setTabs(tabs.map(tab => 
-            tab.id === activeTab ? { ...tab, name: fileName, isDirty: false } : tab
+            tab.id === activeTab ? { ...tab, name: fileName, filePath: filePath, isDirty: false } : tab
           ))
           await refreshFileList()
         }
       } catch (error) {
         console.error('Error saving file:', error)
+        const errorMsg = error instanceof Error ? error.message : String(error)
+        if (errorMsg.includes('permission') || errorMsg.includes('Permission') || errorMsg.includes('read-only')) {
+          alert(`Permission denied: Cannot save file to selected location. Please choose a different location or check permissions.`)
+        } else {
+          alert(`Error saving file: ${errorMsg}`)
+        }
       }
     }
   }
@@ -322,7 +342,7 @@ export function Editor() {
     if (autoSaveIntervalRef.current) clearInterval(autoSaveIntervalRef.current)
     autoSaveIntervalRef.current = setInterval(() => {
       const currentTab = tabs.find(tab => tab.id === activeTab)
-      if (currentTab && currentTab.isDirty && !currentTab.name.startsWith('Untitled')) {
+      if (currentTab && currentTab.isDirty && currentTab.filePath && !currentTab.name.startsWith('Untitled')) {
         saveCurrentFile()
       }
     }, 2000) // Auto-save every 2 seconds
@@ -345,7 +365,7 @@ export function Editor() {
       setRecentFiles(updatedRecentFiles)
       saveRecentFiles(updatedRecentFiles)
       
-      const existingTab = tabs.find(tab => tab.name === fileName)
+      const existingTab = tabs.find(tab => tab.filePath === filePath)
       if (existingTab) {
         setActiveTab(existingTab.id)
       } else {
@@ -353,7 +373,8 @@ export function Editor() {
           id: Date.now().toString(),
           name: fileName,
           content,
-          isDirty: false
+          isDirty: false,
+          filePath: filePath
         }
         setTabs([...tabs, newTab])
         setActiveTab(newTab.id)

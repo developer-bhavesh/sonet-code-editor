@@ -49,20 +49,77 @@ func (a *App) ReadFile(filePath string) (string, error) {
 	return string(content), nil
 }
 
-func (a *App) WriteFile(filePath, content string) error {
+func (a *App) CheckFilePermissions(filePath string) error {
 	dir := filepath.Dir(filePath)
+	
+	// Check if directory is writable
 	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("cannot create directory %s: %v", dir, err)
+	}
+	
+	// Check if file exists and is writable
+	if info, err := os.Stat(filePath); err == nil {
+		if info.Mode().Perm()&0200 == 0 {
+			return fmt.Errorf("file %s is read-only", filePath)
+		}
+	}
+	
+	// Test write access by creating a temp file
+	testFile := filepath.Join(dir, ".write_test_"+filepath.Base(filePath))
+	if err := ioutil.WriteFile(testFile, []byte(""), 0644); err != nil {
+		return fmt.Errorf("no write permission in directory %s: %v", dir, err)
+	}
+	os.Remove(testFile)
+	
+	return nil
+}
+
+func (a *App) WriteFile(filePath, content string) error {
+	// Check permissions first
+	if err := a.CheckFilePermissions(filePath); err != nil {
 		return err
 	}
-	return ioutil.WriteFile(filePath, []byte(content), 0644)
+	dir := filepath.Dir(filePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory %s: %v", dir, err)
+	}
+	
+	// Check if file exists and get its permissions
+	var perm os.FileMode = 0644
+	if info, err := os.Stat(filePath); err == nil {
+		perm = info.Mode().Perm()
+	}
+	
+	// Write to temporary file first to avoid data loss
+	tempFile := filePath + ".tmp"
+	if err := ioutil.WriteFile(tempFile, []byte(content), perm); err != nil {
+		return fmt.Errorf("failed to write temporary file: %v", err)
+	}
+	
+	// Atomic move from temp to final location
+	if err := os.Rename(tempFile, filePath); err != nil {
+		os.Remove(tempFile) // Clean up temp file on error
+		return fmt.Errorf("failed to save file: %v", err)
+	}
+	
+	return nil
 }
 
 func (a *App) CreateFile(filePath string) error {
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
+		return fmt.Errorf("failed to create directory %s: %v", dir, err)
 	}
-	return ioutil.WriteFile(filePath, []byte(""), 0644)
+	
+	// Check if file already exists
+	if _, err := os.Stat(filePath); err == nil {
+		return fmt.Errorf("file already exists: %s", filePath)
+	}
+	
+	if err := ioutil.WriteFile(filePath, []byte(""), 0644); err != nil {
+		return fmt.Errorf("failed to create file: %v", err)
+	}
+	return nil
 }
 
 func (a *App) CreateFolder(folderPath string) error {
