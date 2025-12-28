@@ -189,12 +189,12 @@ export function Editor() {
       
       if (creatingItem.type === 'file') {
         await WriteFile(targetPath, '')
-        await openFileFromPath(targetPath)
+        // Don't open the file, just refresh the file list
+        await refreshFileList()
       } else {
         await CreateFolder(targetPath)
+        await refreshFileList()
       }
-      
-      await refreshFileList()
     } catch (error) {
       console.error(`Error creating ${creatingItem.type}:`, error)
       const errorMsg = error instanceof Error ? error.message : String(error)
@@ -299,6 +299,7 @@ export function Editor() {
           setTabs(tabs.map(tab => 
             tab.id === activeTab ? { ...tab, name: fileName, filePath: filePath, isDirty: false } : tab
           ))
+          // Don't open the file again, just update the current tab
           await refreshFileList()
         }
       } catch (error) {
