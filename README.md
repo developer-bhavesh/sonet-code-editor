@@ -30,7 +30,7 @@ SoneT addresses the gap between heavyweight IDEs and basic text editors, providi
 
 **Status**: Beta Release Ready
 **License**: MIT (Open Source)
-**Platform**: Desktop (Linux, Windows) [Mac OS - Comming soon]
+**Platform**: Desktop (Linux, Windows,Mac OS)
 
 
 ## System Requirements
